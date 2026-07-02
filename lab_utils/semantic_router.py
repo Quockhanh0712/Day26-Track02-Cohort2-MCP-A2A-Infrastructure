@@ -8,11 +8,42 @@ from __future__ import annotations
 
 import math
 import re
+import unicodedata
 from dataclasses import dataclass
 
 
+_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "the",
+    "to",
+    "ve",
+    "tu",
+    "va",
+    "voi",
+    "cho",
+    "toi",
+    "can",
+    "hay",
+    "cac",
+    "nhung",
+    "mot",
+}
+
+
+def _normalize(text: str) -> str:
+    normalized = unicodedata.normalize("NFKD", text.lower())
+    ascii_text = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    return ascii_text.replace("_", " ")
+
+
 def _tokenize(text: str) -> dict[str, float]:
-    tokens = re.findall(r"[a-z0-9]+", text.lower())
+    tokens = [
+        token
+        for token in re.findall(r"[a-z0-9]+", _normalize(text))
+        if token not in _STOPWORDS
+    ]
     counts: dict[str, float] = {}
     for token in tokens:
         counts[token] = counts.get(token, 0.0) + 1.0
@@ -64,3 +95,12 @@ class SemanticRouter:
             return fallback
         name, score = candidates[0]
         return name if score >= self.threshold else fallback
+
+    def route_with_chain(self, request: str, chain: list[str]) -> str:
+        """Route request, then fall back through an ordered agent chain."""
+        primary = self.route_with_fallback(request, fallback="")
+        if primary:
+            return primary
+        if chain:
+            return chain[0]
+        return "orchestrator"
